@@ -1,0 +1,490 @@
+host setup 
+
+masterkube
+
+
+worker1
+
+
+worker2
+
+
+worker3
+
+
+
+install centos-7.6
+
+logon to each node with user root and password
+
+disable swap by comment out swap mount
+vi /etc/fstab
+#/dev/mapper/centos-swap swap                    swap    defaults        0 0
+
+perform update to OS on each system
+$yum update -y
+
+uninstall 
+$yum remote firewalld
+
+uninstall 
+$dnf remove abrt
+
+install docker
+$yum install docker
+
+setup centos network
+$cd /etc/sysconfig/network-script
+$touch ifcfg-eth0
+$touch ifcfg-eth1
+$vi ifcfg-eth0
+past following
+DEVICE=eth0
+IPADDR=192.168.100.11
+NETMASK=255.255.255.0
+NETWORK=192.168.100.0
+BROADCAST=192.168.100.255
+#GATEWAY=192.168.100.1
+#DNS1=1.1.1.1
+ONBOOT=yes
+NAME=eth0
+
+$vi ifcfg-eth1
+DEVICE=eth1
+IPADDR=192.168.1.11
+NETMASK=255.255.255.0
+NETWORK=192.168.1.0
+BROADCAST=192.168.1.255
+GATEWAY=192.168.1.1
+DNS1=1.1.1.1
+ONBOOT=yes
+NAME=eth1
+
+
+setup hostname
+$vi /etc/hostname
+<<add your host name here>>
+masterkube
+
+setup hosts 
+$vi /etc/hosts
+<<add all ip address and hostname of your cluster>>
+127.0.0.1 localhost
+192.168.1.11 masterkube
+192.168.1.12 worker1
+192.168.1.13 worker2
+192.168.1.14 worker3
+
+add kubernetes to repo 
+run following scripts
+
+$cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
+
+Set SELinux in permissive mode (effectively disabling it)
+$setenforce 0
+$sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+
+$yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+$systemctl enable kubelet && systemctl start kubelet
+
+set sysctl config 
+$cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+$sysctl --system
+
+create a single node cluster
+$kubadm init --pod-network-cidr=192.168.0.0/16
+
+wait the process to completed
+
+task finished with  output like this 
+
+[init] Using Kubernetes version: vX.Y.Z
+[preflight] Running pre-flight checks
+[kubeadm] WARNING: starting in 1.8, tokens expire after 24 hours by default (if you require a non-expiring token use --token-ttl 0)
+[certificates] Generated ca certificate and key.
+[certificates] Generated apiserver certificate and key.
+[certificates] apiserver serving cert is signed for DNS names [kubeadm-master kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 10.138.0.4]
+[certificates] Generated apiserver-kubelet-client certificate and key.
+[certificates] Generated sa key and public key.
+[certificates] Generated front-proxy-ca certificate and key.
+[certificates] Generated front-proxy-client certificate and key.
+[certificates] Valid certificates and keys now exist in "/etc/kubernetes/pki"
+[kubeconfig] Wrote KubeConfig file to disk: "admin.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "kubelet.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "controller-manager.conf"
+[kubeconfig] Wrote KubeConfig file to disk: "scheduler.conf"
+[controlplane] Wrote Static Pod manifest for component kube-apiserver to "/etc/kubernetes/manifests/kube-apiserver.yaml"
+[controlplane] Wrote Static Pod manifest for component kube-controller-manager to "/etc/kubernetes/manifests/kube-controller-manager.yaml"
+[controlplane] Wrote Static Pod manifest for component kube-scheduler to "/etc/kubernetes/manifests/kube-scheduler.yaml"
+[etcd] Wrote Static Pod manifest for a local etcd instance to "/etc/kubernetes/manifests/etcd.yaml"
+[init] Waiting for the kubelet to boot up the control plane as Static Pods from directory "/etc/kubernetes/manifests"
+[init] This often takes around a minute; or longer if the control plane images have to be pulled.
+[apiclient] All control plane components are healthy after 39.511972 seconds
+[uploadconfig] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace
+[markmaster] Will mark node master as master by adding a label and a taint
+[markmaster] Master master tainted and labelled with key/value: node-role.kubernetes.io/master=""
+[bootstraptoken] Using token: <token>
+[bootstraptoken] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials
+[bootstraptoken] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token
+[bootstraptoken] Creating the "cluster-info" ConfigMap in the "kube-public" namespace
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of machines by running the following on each node
+as root:
+
+  kubeadm join 192.168.1.70:6443 --token x...........................................
+  
+  copy kubernetes config and credentials
+  
+  $mkdir -p $HOME/.kube
+  $cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  $chown $(id -u):$(id -g) $HOME/.kube/config
+
+  progagate to other node using scp
+  
+  scp -r .kube root@192.168.1.12:
+  enter password
+  
+  scp -r .kube root@192.168.1.12:
+  enter password
+  
+  scp -r .kube root@192.168.1.12:
+  enter password
+  
+  scp -r .kube root@192.168.1.12:
+  enter password
+  
+  now join other node to cluster
+  login to each node one by one with username root and password
+  execute each node 
+  
+    $kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
+
+ wait until the process finished.
+ 
+ if you do not have the token or lost 
+ execute
+ 
+ $kubeadm token listkubeadm token list
+ 
+ 
+ default join token will expire after 24 hours 
+ 
+ to recreate a token 
+ 
+ $kubeadm token create
+ 
+ 
+ If you don’t have the value of --discovery-token-ca-cert-hash, you can get it by running the following command chain on the master node:
+
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | \
+   openssl dgst -sha256 -hex | sed 's/^.* //'
+   
+   
+ go back to masterkube node
+ 
+$kubectl get pods --all-namespaces
+kube-system    coredns-576cbf47c7-dw7jb                                      1/1     <<pending>>     0          107m
+kube-system    coredns-576cbf47c7-xq6mx                                      1/1     <<pending>>     0          107m
+kube-system    etcd-kubemaster                                               1/1     Running     0          106m
+kube-system    kube-apiserver-kubemaster                                     1/1     Running     0          106m
+kube-system    kube-controller-manager-kubemaster                            1/1     Running     0          106m
+kube-system    kube-proxy-8gqhw                                              1/1     Running     0          104m
+kube-system    kube-proxy-pjt9q                                              1/1     Running     0          107m
+kube-system    kube-proxy-s2lvg                                              1/1     Running     0          104m
+kube-system    kube-scheduler-kubemaster                                     1/1     Running     0          106m
+kube-system    tiller-deploy-6f6fd74b68-52968                                1/1     Running     0          102m
+kube-system    weave-net-8xq5h                                               2/2     Running     0          106m
+kube-system    weave-net-bx7qm                                               2/2     Running     1          104m
+kube-system    weave-net-k76xr 
+ 
+ the coresdns not running due to no network running on Kubernetes.
+ 
+ Now install the kubernetes cluster network.
+ 
+ execute 
+ 
+ $kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+ 
+ Wait until process finished.
+ 
+ check the pods
+ 
+ $kubectl get pods --all-namespaces
+ 
+kube-system    coredns-576cbf47c7-dw7jb                                      1/1     Running     0          107m
+kube-system    coredns-576cbf47c7-xq6mx                                      1/1     Running     0          107m
+kube-system    etcd-kubemaster                                               1/1     Running     0          106m
+kube-system    kube-apiserver-kubemaster                                     1/1     Running     0          106m
+kube-system    kube-controller-manager-kubemaster                            1/1     Running     0          106m
+kube-system    kube-proxy-8gqhw                                              1/1     Running     0          104m
+kube-system    kube-proxy-pjt9q                                              1/1     Running     0          107m
+kube-system    kube-proxy-s2lvg                                              1/1     Running     0          104m
+kube-system    kube-scheduler-kubemaster                                     1/1     Running     0          106m
+kube-system    tiller-deploy-6f6fd74b68-52968                                1/1     Running     0          102m
+kube-system    weave-net-8xq5h                                               2/2     Running     0          106m
+kube-system    weave-net-bx7qm                                               2/2     Running     1          104m
+kube-system    weave-net-k76xr                                               2/2     Running     1          104m
+
+Check STATUS Column if all pods is in Running state, other there may be a problem in installation or firewall rules.
+
+default master node is isolated from workers node.
+
+Execute following allow master to do worker job.
+
+$kubectl taint nodes --all node-role.kubernetes.io/master-kubectl taint nodes --all node-role.kubernetes.io/master-
+
+Check your node.
+
+$kubectl get nodes
+NAME         STATUS   ROLES    AGE    VERSION
+masterkube   Ready    master   112m   v1.12.2
+worker1      Ready    <none>   108m   v1.12.2
+worker2      Ready    <none>   108m   v1.12.2
+worker3      Ready    <none>   108m   v1.12.2
+worker4      Ready    <none>   108m   v1.12.2
+
+Indicate all node is ready.
+
+note:
+to remove a node
+
+$kubectl drain <node name> --delete-local-data --force --ignore-daemonsets
+$kubectl delete node <node name>
+
+to remove all kubeadm installed state
+
+$kubeadm reset
+
+Adding dashboard to Kubernetes
+
+$kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+
+create a sample user for dashboard
+
+$cat <<EOF> serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kube-system
+EOF
+
+then execute
+$kubectl apply -f serviceaccount.yaml
+
+$cat <<EOF> clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kube-system
+EOF
+  
+  then execute
+  $kubectl apply -f clusterrolebinding.yaml
+  
+  get bearer token execute following
+  
+  $kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')
+  
+  show display following, check the kubernetes-dashboard pod if it is in Running state.
+  NAME                                    READY   STATUS    RESTARTS   AGE
+coredns-576cbf47c7-dw7jb                1/1     Running   0          124m
+coredns-576cbf47c7-xq6mx                1/1     Running   0          124m
+etcd-kubemaster                         1/1     Running   0          123m
+kube-apiserver-kubemaster               1/1     Running   0          123m
+kube-controller-manager-kubemaster      1/1     Running   0          123m
+kube-proxy-8gqhw                        1/1     Running   0          120m
+kube-proxy-pjt9q                        1/1     Running   0          124m
+kube-proxy-s2lvg                        1/1     Running   0          120m
+kube-scheduler-kubemaster               1/1     Running   0          123m
+kubernetes-dashboard-77fd78f978-mbqzm   1/1     Running   0          72s
+tiller-deploy-6f6fd74b68-52968          1/1     Running   0          118m
+weave-net-8xq5h                         2/2     Running   0          122m
+weave-net-bx7qm                         2/2     Running   1          120m
+weave-net-k76xr                         2/2     Running   1          120m
+
+  $kubectl get svc -n kube-system
+  
+  NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)         AGE
+kube-dns               ClusterIP   10.96.0.10       <none>        53/UDP,53/TCP   125m
+kubernetes-dashboard   ClusterIP   10.102.222.174   <none>        443/TCP         2m21s
+tiller-deploy          ClusterIP   10.110.24.38     <none>        44134/TCP       120m
+
+check if EXTERNAL-IP is none, that is the kubernetes is default configure to clusterIP mode
+change it NodePort allow external workstation to access
+
+$kubectl edit svc -n kube-system kubernetes-dashboard
+
+The command output should be a editor with something like this.
+
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"k8s-app":"kubernetes-dashboard"},"name":"kubernetes-dashboard","namespace":"kube-system"},"spec":{"ports":[{"port":443,"targetPort":8443}],"selector":{"k8s-app":"kubernetes-dashboard"}}}
+  creationTimestamp: 2018-11-13T12:28:02Z
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+  resourceVersion: "15110"
+  selfLink: /api/v1/namespaces/kube-system/services/kubernetes-dashboard
+  uid: 90215bac-e73f-11e8-b4ec-000a0b000021
+spec:
+  clusterIP: 10.102.222.174
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    k8s-app: kubernetes-dashboard
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+  --
+  check the type: ClusterIP -->  change it to type: NodePort
+  press esc -> :wq to save
+  
+  Execute 
+  $kubectl describe svc -n kube-system kubernetes-dashboard
+  the command output.
+  Name:                     kubernetes-dashboard
+Namespace:                kube-system
+Labels:                   k8s-app=kubernetes-dashboard
+Annotations:              kubectl.kubernetes.io/last-applied-configuration:
+                            {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"k8s-app":"kubernetes-dashboard"},"name":"kubernetes-dashboard"...
+Selector:                 k8s-app=kubernetes-dashboard
+Type:                     NodePort
+IP:                       10.102.222.174
+Port:                     <unset>  443/TCP
+TargetPort:               8443/TCP
+NodePort:                 <unset>  31976/TCP
+Endpoints:                10.32.0.11:8443
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+  check the NodePort: <unset>  31976
+  
+
+  using a browser 
+  
+  type url 
+  https://192.168.1.11:31976
+  
+  display will show a sign-in screen.
+  
+  select Token
+  
+  past the user token we obtain 
+  
+or using this command to get token
+
+  $kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')
+
+
+Browser should goto overview menu
+https://192.168.1.11:31976/#!/overview?namespace=default
+
+
+------------------------------------------------
+
+install Helm charts package manager.
+
+download
+
+
+$wget https://storage.googleapis.com/kubernetes-helm/helm-v2.11.0-linux-amd64.tar.gz
+uncompressing using tar utility
+$tar -xvf helm-v2.11.0-linux-amd64.tar.gz
+
+change folder name to helm
+
+add path to .bashrc
+export PATH=$HELM:$PATH:
+
+test 
+$helm
+
+start helm
+$helm init 
+
+$helm repo list
+NAME    URL                                             
+stable  https://kubernetes-charts.storage.googleapis.com
+local   http://127.0.0.1:8879/charts      
+
+add bitnami repository to helm 
+$helm repo add https://charts.bitnami.com/bitnami 
+
+check again
+$helm repo list 
+NAME    URL                                             
+stable  https://kubernetes-charts.storage.googleapis.com
+local   http://127.0.0.1:8879/charts                    
+bitnami https://charts.bitnami.com/bitnami
+
+------------------------------------------------
+Now create istio system via helm template
+
+install istio first.
+
+download istio from github
+curl -L https://git.io/getLatestIstio | sh -
+cd istio-1.0.3
+
+$helm template install/kubernetes/helm/istio --name istio --set grafana.enabled=true --set gateways.istio-ingressgateway.type=NodePort --set gateways.istio-egressgateway.type=NodePort --namespace istio-system > $HOME/istio.yaml
+
+$kubectl create namespace istio-system
+$kubectl apply -f $HOME/istio.yaml
+
+Istio Side car auto insertion
+
+check automatic insertion of sidecar
+
+$kubectl api-versions | grep admissionregistration
+admissionregistration.k8s.io/v1beta1
+
+
+  
+  -------------------------------------------------
+install KubeApps service
+
+
